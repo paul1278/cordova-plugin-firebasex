@@ -5,7 +5,6 @@
 
 
 @import UserNotifications;
-@import FirebaseFirestore;
 
 // Implement UNUserNotificationCenterDelegate to receive display notification via APNS for devices running iOS 10 and above.
 // Implement FIRMessagingDelegate to receive data message via FCM for devices running iOS 10 and above.
@@ -23,8 +22,6 @@ static AppDelegate* instance;
 }
 
 static NSDictionary* mutableUserInfo;
-static FIRAuthStateDidChangeListenerHandle authStateChangeListener;
-static bool authStateChangeListenerInitialized = false;
 static bool shouldEstablishDirectChannel = false;
 
 + (void)load {
@@ -80,25 +77,6 @@ static bool shouldEstablishDirectChannel = false;
         // Set FCM messaging delegate
         [FIRMessaging messaging].delegate = self;
         [FIRMessaging messaging].shouldEstablishDirectChannel = shouldEstablishDirectChannel;
-        
-        // Setup Firestore
-        [FirebasePlugin setFirestore:[FIRFirestore firestore]];
-        
-        // Setup Google SignIn
-        [GIDSignIn sharedInstance].clientID = [FIRApp defaultApp].options.clientID;
-        [GIDSignIn sharedInstance].delegate = self;
-        
-        authStateChangeListener = [[FIRAuth auth] addAuthStateDidChangeListener:^(FIRAuth * _Nonnull auth, FIRUser * _Nullable user) {
-            @try {
-                if(!authStateChangeListenerInitialized){
-                    authStateChangeListenerInitialized = true;
-                }else{
-                    [FirebasePlugin.firebasePlugin executeGlobalJavascript:[NSString stringWithFormat:@"FirebasePlugin._onAuthStateChange(%@)", (user != nil ? @"true": @"false")]];
-                }
-            }@catch (NSException *exception) {
-                [FirebasePlugin.firebasePlugin handlePluginExceptionWithoutContext:exception];
-            }
-        }];
 
         // Set NSNotificationCenter observer
         [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(tokenRefreshNotification:)
@@ -123,45 +101,6 @@ static bool shouldEstablishDirectChannel = false;
     self.applicationInBackground = @(YES);
     [FIRMessaging messaging].shouldEstablishDirectChannel = false;
     [FirebasePlugin.firebasePlugin _logMessage:@"Enter background: FCM direct channel = false"];
-}
-
-# pragma mark - Google SignIn
-- (void)signIn:(GIDSignIn *)signIn
-didSignInForUser:(GIDGoogleUser *)user
-     withError:(NSError *)error {
-    @try{
-        CDVPluginResult* pluginResult;
-        if (error == nil) {
-            GIDAuthentication *authentication = user.authentication;
-            FIRAuthCredential *credential =
-            [FIRGoogleAuthProvider credentialWithIDToken:authentication.idToken
-                                           accessToken:authentication.accessToken];
-            
-            NSNumber* key = [[FirebasePlugin firebasePlugin] saveAuthCredential:credential];
-            NSMutableDictionary* result = [[NSMutableDictionary alloc] init];
-            [result setValue:@"true" forKey:@"instantVerification"];
-            [result setValue:key forKey:@"id"];
-            pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDictionary:result];
-        } else {
-          pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:error.description];
-        }
-        if ([FirebasePlugin firebasePlugin].googleSignInCallbackId != nil) {
-            [[FirebasePlugin firebasePlugin].commandDelegate sendPluginResult:pluginResult callbackId:[FirebasePlugin firebasePlugin].googleSignInCallbackId];
-        }
-    }@catch (NSException *exception) {
-        [FirebasePlugin.firebasePlugin handlePluginExceptionWithoutContext:exception];
-    }
-}
-
-- (void)signIn:(GIDSignIn *)signIn
-didDisconnectWithUser:(GIDGoogleUser *)user
-     withError:(NSError *)error {
-    NSString* msg = @"Google SignIn delegate: didDisconnectWithUser";
-    if(error != nil){
-        [FirebasePlugin.firebasePlugin _logError:[NSString stringWithFormat:@"%@: %@", msg, error]];
-    }else{
-        [FirebasePlugin.firebasePlugin _logMessage:msg];
-    }
 }
 
 # pragma mark - FIRMessagingDelegate
@@ -492,66 +431,6 @@ didDisconnectWithUser:(GIDGoogleUser *)user
 - (void)applicationReceivedRemoteMessage:(FIRMessagingRemoteMessage *)remoteMessage {
     // Print full message
     [FirebasePlugin.firebasePlugin _logInfo:[NSString stringWithFormat:@"applicationReceivedRemoteMessage: %@", [remoteMessage appData]]];
-}
-
-// Apple Sign In
-- (void)authorizationController:(ASAuthorizationController *)controller
-   didCompleteWithAuthorization:(ASAuthorization *)authorization API_AVAILABLE(ios(13.0)) {
-    @try{
-        CDVPluginResult* pluginResult;
-        NSString* errorMessage = nil;
-        FIROAuthCredential *credential;
-        
-        if ([authorization.credential isKindOfClass:[ASAuthorizationAppleIDCredential class]]) {
-            ASAuthorizationAppleIDCredential *appleIDCredential = authorization.credential;
-            NSString *rawNonce = [FirebasePlugin appleSignInNonce];
-            if(rawNonce == nil){
-                errorMessage = @"Invalid state: A login callback was received, but no login request was sent.";
-            }else if (appleIDCredential.identityToken == nil) {
-                errorMessage = @"Unable to fetch identity token.";
-            }else{
-                NSString *idToken = [[NSString alloc] initWithData:appleIDCredential.identityToken
-                                                          encoding:NSUTF8StringEncoding];
-                if (idToken == nil) {
-                    errorMessage = [NSString stringWithFormat:@"Unable to serialize id token from data: %@", appleIDCredential.identityToken];
-                }else{
-                    // Initialize a Firebase credential.
-                    credential = [FIROAuthProvider credentialWithProviderID:@"apple.com"
-                        IDToken:idToken
-                        rawNonce:rawNonce];
-                    
-                    NSNumber* key = [[FirebasePlugin firebasePlugin] saveAuthCredential:credential];
-                    NSMutableDictionary* result = [[NSMutableDictionary alloc] init];
-                    [result setValue:@"true" forKey:@"instantVerification"];
-                    [result setValue:key forKey:@"id"];
-                    pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsDictionary:result];
-                }
-            }
-            if(errorMessage != nil){
-                [FirebasePlugin.firebasePlugin _logError:errorMessage];
-                pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:errorMessage];
-            }
-            if ([FirebasePlugin firebasePlugin].appleSignInCallbackId != nil) {
-                [[FirebasePlugin firebasePlugin].commandDelegate sendPluginResult:pluginResult callbackId:[FirebasePlugin firebasePlugin].appleSignInCallbackId];
-            }
-        }
-    }@catch (NSException *exception) {
-        [FirebasePlugin.firebasePlugin handlePluginExceptionWithoutContext:exception];
-    }
-}
-
-- (void)authorizationController:(ASAuthorizationController *)controller
-           didCompleteWithError:(NSError *)error API_AVAILABLE(ios(13.0)) {
-    NSString* errorMessage = [NSString stringWithFormat:@"Sign in with Apple errored: %@", error];
-    [FirebasePlugin.firebasePlugin _logError:errorMessage];
-    if ([FirebasePlugin firebasePlugin].appleSignInCallbackId != nil) {
-        CDVPluginResult* pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR messageAsString:errorMessage];
-        [[FirebasePlugin firebasePlugin].commandDelegate sendPluginResult:pluginResult callbackId:[FirebasePlugin firebasePlugin].appleSignInCallbackId];
-    }
-}
-
-- (nonnull ASPresentationAnchor)presentationAnchorForAuthorizationController:(nonnull ASAuthorizationController *)controller  API_AVAILABLE(ios(13.0)){
-    return self.viewController.view.window;
 }
 
 @end

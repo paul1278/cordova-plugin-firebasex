@@ -47,10 +47,6 @@ var setupEnv = function(){
                 src: './plugins/' + utilities.getPluginId() + '/src/android/colors.xml',
                 target: ANDROID_DIR + '/app/src/main/res/values/colors.xml'
             },
-            performanceGradlePlugin: {
-                classDef: 'com.google.firebase:perf-plugin',
-                pluginDef: 'com.google.firebase.firebase-perf'
-            }
         }
     };
 }
@@ -122,12 +118,6 @@ module.exports = function(context){
         if(writeChanges){
             utilities.writeJsonToXmlFile($colorsXml, PLATFORM.ANDROID.colorsXml.target);
             utilities.log('Updated colors.xml with accent color');
-        }
-
-        if(pluginVariables['ANDROID_FIREBASE_PERFORMANCE_MONITORING'] && pluginVariables['ANDROID_FIREBASE_PERFORMANCE_MONITORING'] === 'true'){
-            // Add Performance Monitoring gradle plugin for Android network traffic
-            androidHelper.addDependencyToRootGradle(PLATFORM.ANDROID.performanceGradlePlugin.classDef+":"+pluginVariables["ANDROID_FIREBASE_PERF_GRADLE_PLUGIN_VERSION"]);
-            androidHelper.applyPluginToAppGradle(PLATFORM.ANDROID.performanceGradlePlugin.pluginDef);
         }
     }
 

@@ -21,61 +21,6 @@ module.exports = {
     },
 
     /**
-     * This helper is used to add a build phase to the XCode project which runs a shell
-     * script during the build process. The script executes Crashlytics run command line
-     * tool with the API and Secret keys. This tool is used to upload the debug symbols
-     * (dSYMs) so that Crashlytics can display stack trace information in it's web console.
-     */
-    addShellScriptBuildPhase: function (context, xcodeProjectPath) {
-
-        // Read and parse the XCode project (.pxbproj) from disk.
-        // File format information: http://www.monobjc.net/xcode-project-file-format.html
-        var xcodeProject = xcode.project(xcodeProjectPath);
-        xcodeProject.parseSync();
-
-        // Build the body of the script to be executed during the build phase.
-        var script = '"' + '\\"${PODS_ROOT}/FirebaseCrashlytics/run\\"' + '"';
-
-        // Generate a unique ID for our new build phase.
-        var id = xcodeProject.generateUuid();
-        // Create the build phase.
-        xcodeProject.hash.project.objects.PBXShellScriptBuildPhase[id] = {
-            isa: "PBXShellScriptBuildPhase",
-            buildActionMask: 2147483647,
-            files: [],
-            inputPaths: ['"' + '$(BUILT_PRODUCTS_DIR)/$(INFOPLIST_PATH)' + '"'],
-            name: comment,
-            outputPaths: [],
-            runOnlyForDeploymentPostprocessing: 0,
-            shellPath: "/bin/sh",
-            shellScript: script,
-            showEnvVarsInLog: 0
-        };
-
-        // Add a comment to the block (viewable in the source of the pbxproj file).
-        xcodeProject.hash.project.objects.PBXShellScriptBuildPhase[id + "_comment"] = comment;
-
-        // Add this new shell script build phase block to the targets.
-        for (var nativeTargetId in xcodeProject.hash.project.objects.PBXNativeTarget) {
-
-            // Skip over the comment blocks.
-            if (nativeTargetId.indexOf("_comment") !== -1) {
-                continue;
-            }
-
-            var nativeTarget = xcodeProject.hash.project.objects.PBXNativeTarget[nativeTargetId];
-
-            nativeTarget.buildPhases.push({
-                value: id,
-                comment: comment
-            });
-        }
-
-        // Finally, write the .pbxproj back out to disk.
-        fs.writeFileSync(path.resolve(xcodeProjectPath), xcodeProject.writeSync());
-    },
-
-    /**
      * This helper is used to remove the build phase from the XCode project that was added
      * by the addShellScriptBuildPhase() helper method.
      */
@@ -198,18 +143,6 @@ module.exports = {
             appPlistModified = false,
             entitlementsPlistsModified = false;
 
-        if(typeof pluginVariables['FIREBASE_ANALYTICS_COLLECTION_ENABLED'] !== 'undefined'){
-            googlePlist["FIREBASE_ANALYTICS_COLLECTION_ENABLED"] = (pluginVariables['FIREBASE_ANALYTICS_COLLECTION_ENABLED'] !== "false" ? "true" : "false") ;
-            googlePlistModified = true;
-        }
-        if(typeof pluginVariables['FIREBASE_PERFORMANCE_COLLECTION_ENABLED'] !== 'undefined'){
-            googlePlist["FIREBASE_PERFORMANCE_COLLECTION_ENABLED"] = (pluginVariables['FIREBASE_PERFORMANCE_COLLECTION_ENABLED'] !== "false" ? "true" : "false") ;
-            googlePlistModified = true;
-        }
-        if(typeof pluginVariables['FIREBASE_CRASHLYTICS_COLLECTION_ENABLED'] !== 'undefined'){
-            googlePlist["FirebaseCrashlyticsCollectionEnabled"] = (pluginVariables['FIREBASE_CRASHLYTICS_COLLECTION_ENABLED'] !== "false" ? "true" : "false") ;
-            googlePlistModified = true;
-        }
         if(typeof pluginVariables['IOS_SHOULD_ESTABLISH_DIRECT_CHANNEL'] !== 'undefined'){
             appPlist["shouldEstablishDirectChannel"] = (pluginVariables['IOS_SHOULD_ESTABLISH_DIRECT_CHANNEL'] === "true") ;
             appPlistModified = true;

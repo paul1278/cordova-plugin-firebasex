@@ -1,10 +1,8 @@
 #import "AppDelegate.h"
-#import <GoogleSignIn/GoogleSignIn.h>
 
 @import UserNotifications;
-@import AuthenticationServices;
 
-@interface AppDelegate (FirebasePlugin) <UIApplicationDelegate, GIDSignInDelegate, ASAuthorizationControllerDelegate, ASAuthorizationControllerPresentationContextProviding>
+@interface AppDelegate (FirebasePlugin) <UIApplicationDelegate>
 + (AppDelegate *) instance;
 @property (nonatomic, strong) NSNumber * _Nonnull applicationInBackground;
 @property (NS_NONATOMIC_IOSONLY, nullable, weak) id <UNUserNotificationCenterDelegate> delegate;
